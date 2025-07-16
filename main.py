@@ -8,8 +8,8 @@ import pygame
 class MusicPlayerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Tool Audio Sự Kiện")
-        self.root.geometry("900x600")  # Điều chỉnh kích thước giao diện
+        self.root.title("TH AUDIO - ÂM THANH ÁNH SÁNG SỰ KIỆN CHUYÊN NGHIỆP")
+        self.root.geometry("920x600")  # Điều chỉnh kích thước giao diện
         self.root.resizable(False, False)  # Cố định kích cỡ giao diện
 
         # Khởi tạo pygame mixer
@@ -71,6 +71,11 @@ class MusicPlayerApp:
         self.tab_inner_frame = ctk.CTkFrame(self.tab_canvas)
         self.tab_canvas.create_window((0, 0), window=self.tab_inner_frame, anchor='nw')
 
+        # Bổ sung scroll ngang khi chuột trong tab
+        self.tab_canvas.bind("<Enter>", lambda e: self.on_tab_enter())
+        self.tab_canvas.bind("<Leave>", lambda e: self.on_tab_leave())
+        self.tab_canvas.bind("<MouseWheel>", lambda e: self.on_tab_scroll(e))
+
         # Hàng 3: Danh sách bài hát (scroll dọc)
         self.song_frame = ctk.CTkFrame(self.root)
         self.song_frame.pack(fill='both', expand=True, padx=10, pady=5)
@@ -84,6 +89,9 @@ class MusicPlayerApp:
         self.song_inner_frame = ctk.CTkFrame(self.song_canvas)
         self.song_canvas.create_window((0, 0), window=self.song_inner_frame, anchor='nw')
 
+        # Bổ sung scroll dọc theo lăn chuột, chỉ khi có thể scroll
+        self.song_canvas.bind("<MouseWheel>", lambda e: self.on_song_scroll(e))
+
         # Hàng 4: Nút Cập nhật + Chỉnh sửa
         button_frame = ctk.CTkFrame(self.root)
         button_frame.pack(fill='x', padx=10, pady=5)
@@ -94,7 +102,35 @@ class MusicPlayerApp:
         self.tab_inner_frame.bind('<Configure>',
                                   lambda e: self.tab_canvas.configure(scrollregion=self.tab_canvas.bbox('all')))
         self.song_inner_frame.bind('<Configure>',
-                                   lambda e: self.song_canvas.configure(scrollregion=self.song_canvas.bbox('all')))
+                                   lambda e: self.update_scroll_region())
+
+    def update_scroll_region(self):
+        # Cập nhật vùng scroll của song_canvas
+        self.song_canvas.configure(scrollregion=self.song_canvas.bbox('all'))
+
+    def on_tab_enter(self):
+        # Khi chuột vào khu vực tab, ưu tiên scroll ngang
+        self.tab_canvas.bind("<MouseWheel>", lambda e: self.on_tab_scroll(e))
+
+    def on_tab_leave(self):
+        # Khi chuột rời tab, khôi phục scroll dọc cho song_canvas
+        self.tab_canvas.unbind("<MouseWheel>")
+
+    def on_tab_scroll(self, event):
+        # Scroll ngang khi chuột trong tab, không kiểm tra button
+        if self.tab_canvas.xview() != (0.0, 1.0):  # Kiểm tra nếu có thể scroll
+            self.tab_canvas.xview_scroll(int(-1*(event.delta/120)), "units")
+
+    def on_song_scroll(self, event):
+        # Scroll dọc khi chuột trong song_canvas, chỉ khi có thể scroll, không kiểm tra button
+        if self.song_canvas.yview() != (0.0, 1.0):  # Kiểm tra nếu nội dung vượt khung
+            self.song_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+
+    def is_mouse_over_button(self):
+        # Kiểm tra xem chuột có đang nằm trên button nào không
+        x, y = self.root.winfo_pointerxy()
+        widget = self.root.winfo_containing(x, y)
+        return isinstance(widget, ctk.CTkButton)
 
     def set_volume(self, val):
         volume = float(val) / 100
@@ -215,13 +251,13 @@ class MusicPlayerApp:
         for widget in self.song_inner_frame.winfo_children():
             widget.destroy()
 
-        # Tạo buttons cho bài hát (2 cột)
+        # Tạo buttons cho bài hát (3 cột)
         song_list = self.songs[tab]
         for i, song in enumerate(song_list):
-            btn = ctk.CTkButton(self.song_inner_frame, text=song["display"], width=415, height=80,  # Độ rộng 400px, hỗ trợ 2 dòng
+            btn = ctk.CTkButton(self.song_inner_frame, text=song["display"], width=250, height=80,  # Độ rộng 250px
                                 command=lambda s=song["file"], t=tab: self.play_song(t, s))
-            row = i // 2  # Số dòng
-            col = i % 2   # Vị trí trong 2 cột
+            row = i // 3  # Số dòng, chia thành 3 cột
+            col = i % 3   # Vị trí trong 3 cột
             btn.grid(row=row, column=col, padx=5, pady=5, sticky='ew')
 
     def play_song(self, tab, song):
