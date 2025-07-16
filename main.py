@@ -9,7 +9,7 @@ class MusicPlayerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("TH AUDIO - ÂM THANH ÁNH SÁNG SỰ KIỆN CHUYÊN NGHIỆP")
-        self.root.geometry("920x600")  # Điều chỉnh kích thước giao diện
+        self.root.geometry("880x600")  # Điều chỉnh kích thước giao diện
         self.root.resizable(False, False)  # Cố định kích cỡ giao diện
 
         # Khởi tạo pygame mixer
