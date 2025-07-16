@@ -107,10 +107,18 @@ class MusicPlayerApp:
 
         # Bind mouse wheel cho toàn bộ cửa sổ để scroll danh sách bài hát
         self.bind_mouse_wheel_recursive(self.root)
+        
+        # Cấu hình để song_inner_frame expand theo width của canvas
+        self.song_canvas.bind('<Configure>', self.on_canvas_configure)
 
     def update_scroll_region(self):
         # Cập nhật vùng scroll của song_canvas
         self.song_canvas.configure(scrollregion=self.song_canvas.bbox('all'))
+
+    def on_canvas_configure(self, event):
+        # Cập nhật width của song_inner_frame để match với canvas width
+        canvas_width = event.width
+        self.song_canvas.itemconfig(self.song_canvas.find_all()[0], width=canvas_width)
 
     def on_tab_enter(self):
         # Khi chuột vào khu vực tab, ưu tiên scroll ngang
@@ -302,7 +310,7 @@ class MusicPlayerApp:
         # Tạo buttons cho bài hát (3 cột)
         song_list = self.songs[tab]
         for i, song in enumerate(song_list):
-            btn = ctk.CTkButton(self.song_inner_frame, text=song["display"], width=250, height=80,  # Độ rộng 250px
+            btn = ctk.CTkButton(self.song_inner_frame, text=song["display"], height=80,  # Loại bỏ width cố định
                                 command=lambda s=song["file"], t=tab: self.play_song(t, s))
             row = i // 3  # Số dòng, chia thành 3 cột
             col = i % 3   # Vị trí trong 3 cột
@@ -310,6 +318,10 @@ class MusicPlayerApp:
             
             # Bind mouse wheel cho button mới tạo
             btn.bind("<MouseWheel>", self.on_global_mouse_wheel)
+            
+        # Cấu hình weights để các cột expand đều nhau
+        for col in range(3):
+            self.song_inner_frame.grid_columnconfigure(col, weight=1)
 
     def play_song(self, tab, song):
         if self.current_song == song and not self.paused:
