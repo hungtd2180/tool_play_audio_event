@@ -18,6 +18,7 @@ class MusicPlayerApp:
         self.paused = False
         self.current_position = 0  # Thời gian đã phát (ms)
         self.total_duration = 0  # Tổng thời gian (ms)
+        self.current_tab = None  # Track tab hiện tại đang được chọn
 
         # Lấy đường dẫn thư mục data (hỗ trợ đóng gói .exe)
         if getattr(sys, 'frozen', False):
@@ -104,6 +105,9 @@ class MusicPlayerApp:
         self.song_inner_frame.bind('<Configure>',
                                    lambda e: self.update_scroll_region())
 
+        # Bind mouse wheel cho toàn bộ cửa sổ để scroll danh sách bài hát
+        self.bind_mouse_wheel_recursive(self.root)
+
     def update_scroll_region(self):
         # Cập nhật vùng scroll của song_canvas
         self.song_canvas.configure(scrollregion=self.song_canvas.bbox('all'))
@@ -131,6 +135,46 @@ class MusicPlayerApp:
         x, y = self.root.winfo_pointerxy()
         widget = self.root.winfo_containing(x, y)
         return isinstance(widget, ctk.CTkButton)
+
+    def bind_mouse_wheel_recursive(self, widget):
+        """Bind mouse wheel events cho việc scroll danh sách bài hát cho tất cả widgets con"""
+        # Bind scroll cho song list, không phải tab scroll
+        widget.bind("<MouseWheel>", self.on_global_mouse_wheel)
+        
+        # Bind cho tất cả widget con
+        try:
+            for child in widget.winfo_children():
+                self.bind_mouse_wheel_recursive(child)
+        except:
+            pass  # Ignore errors for widgets that don't have children
+
+    def on_global_mouse_wheel(self, event):
+        """Xử lý mouse wheel để scroll danh sách bài hát từ bất kỳ đâu trên giao diện"""
+        if self.current_tab is None:
+            return
+        
+        # Chỉ scroll song list nếu có thể scroll
+        if self.song_canvas.yview() != (0.0, 1.0):  # Kiểm tra nếu có thể scroll
+            # Xác định hướng scroll
+            if event.delta > 0:
+                # Scroll lên
+                self.song_canvas.yview_scroll(-1, "units")
+            elif event.delta < 0:
+                # Scroll xuống
+                self.song_canvas.yview_scroll(1, "units")
+
+    def on_mouse_wheel(self, event):
+        """Xử lý sự kiện mouse wheel để scroll danh sách bài hát"""
+        if self.current_tab is None:
+            return
+        
+        # Xác định hướng scroll
+        if event.num == 4 or event.delta > 0:
+            # Scroll lên
+            self.song_canvas.yview_scroll(-1, "units")
+        elif event.num == 5 or event.delta < 0:
+            # Scroll xuống
+            self.song_canvas.yview_scroll(1, "units")
 
     def set_volume(self, val):
         volume = float(val) / 100
@@ -234,6 +278,9 @@ class MusicPlayerApp:
                                 fg_color="transparent", text_color="black", font=("Arial", 12, "bold"))
             btn.pack(side='left', padx=5)
             self.tab_buttons[tab] = btn
+            
+            # Bind mouse wheel cho tab button
+            btn.bind("<MouseWheel>", self.on_global_mouse_wheel)
 
         # Load tab đầu tiên nếu có
         if self.tabs:
@@ -246,6 +293,7 @@ class MusicPlayerApp:
         for btn in self.tab_buttons.values():
             btn.configure(fg_color="transparent", text_color="black", font=("Arial", 12, "bold"))
         self.tab_buttons[tab].configure(fg_color="#3498db", text_color="white")  # Nền xanh, chữ trắng khi chọn
+        self.current_tab = tab # Cập nhật tab hiện tại
 
         # Xóa danh sách bài hát cũ
         for widget in self.song_inner_frame.winfo_children():
@@ -259,6 +307,9 @@ class MusicPlayerApp:
             row = i // 3  # Số dòng, chia thành 3 cột
             col = i % 3   # Vị trí trong 3 cột
             btn.grid(row=row, column=col, padx=5, pady=5, sticky='ew')
+            
+            # Bind mouse wheel cho button mới tạo
+            btn.bind("<MouseWheel>", self.on_global_mouse_wheel)
 
     def play_song(self, tab, song):
         if self.current_song == song and not self.paused:
