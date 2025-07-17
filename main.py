@@ -4,23 +4,25 @@ import subprocess
 import customtkinter as ctk
 from pathlib import Path
 import pygame
+import re
+from mutagen import File as MutagenFile
+
 
 class MusicPlayerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("TH AUDIO - ÂM THANH ÁNH SÁNG SỰ KIỆN CHUYÊN NGHIỆP")
-        self.root.geometry("880x600")  # Điều chỉnh kích thước giao diện
-        self.root.resizable(False, False)  # Cố định kích cỡ giao diện
+        self.root.geometry("900x600")
+        self.root.resizable(False, False)
 
         # Khởi tạo pygame mixer
         pygame.mixer.init()
         self.current_song = None
         self.paused = False
-        self.current_position = 0  # Thời gian đã phát (ms)
-        self.total_duration = 0  # Tổng thời gian (ms)
-        self.current_tab = None  # Track tab hiện tại đang được chọn
-
-        # Lấy đường dẫn thư mục data (hỗ trợ đóng gói .exe)
+        self.current_position = 0
+        self.total_duration = 0
+        self.current_tab = None
+        # Lấy đường dẫn thư mục data
         if getattr(sys, 'frozen', False):
             self.data_dir = os.path.join(os.path.dirname(sys.executable), 'data')
         else:
@@ -35,6 +37,62 @@ class MusicPlayerApp:
         ctk.set_default_color_theme("blue")
         self.setup_ui()
         self.load_data()
+
+    def natural_sort_key(self, text):
+        """
+        Sắp xếp tự nhiên giống Windows Explorer
+        VD: File1.mp3, File2.mp3, File10.mp3 (thay vì File1.mp3, File10.mp3, File2.mp3)
+        """
+
+        def convert(text):
+            return int(text) if text.isdigit() else text.lower()
+
+        return [convert(c) for c in re.split(r'(\d+)', text)]
+
+    def get_track_number(self, file_path):
+        """
+        Lấy track number từ metadata của file nhạc
+        Trả về 0 nếu không có hoặc lỗi
+        """
+        try:
+            audio_file = MutagenFile(file_path)
+            if audio_file is not None:
+                # Thử các tag khác nhau cho track number
+                track_tags = ['TRCK', 'tracknumber', 'track']
+                for tag in track_tags:
+                    if tag in audio_file:
+                        track_info = str(audio_file[tag][0])
+                        # Xử lý format "1/12" -> lấy số đầu
+                        if '/' in track_info:
+                            track_info = track_info.split('/')[0]
+                        return int(track_info)
+        except:
+            pass
+        return 0
+
+    def sort_songs_advanced(self, folder_path, song_files):
+        """
+        Sắp xếp bài hát theo nhiều tiêu chí:
+        1. Track number (nếu có)
+        2. Natural sorting cho tên file
+        3. Alphabetical sorting
+        """
+        songs_with_info = []
+
+        for song_file in song_files:
+            file_path = os.path.join(folder_path, song_file)
+            track_num = self.get_track_number(file_path)
+
+            songs_with_info.append({
+                'filename': song_file,
+                'track_number': track_num,
+                'natural_key': self.natural_sort_key(song_file)
+            })
+
+        # Sắp xếp theo: track number trước, sau đó natural sorting
+        songs_with_info.sort(key=lambda x: (x['track_number'], x['natural_key']))
+
+        return [song['filename'] for song in songs_with_info]
 
     def setup_ui(self):
         # Hàng 1: Thanh âm lượng + Nút dừng/phát + Thanh timeline
@@ -51,12 +109,13 @@ class MusicPlayerApp:
         self.max_label.pack(side='left', padx=5)
         self.time_played_label = ctk.CTkLabel(volume_frame, text="00:00", width=60)
         self.time_played_label.pack(side='left', padx=2)
-        self.timeline_slider = ctk.CTkSlider(volume_frame, from_=0, to=100, width=200, state="disabled")  # Không tương tác
+        self.timeline_slider = ctk.CTkSlider(volume_frame, from_=0, to=100, width=200, state="disabled")
         self.timeline_slider.set(0)
         self.timeline_slider.pack(side='left', padx=2)
         self.time_remaining_label = ctk.CTkLabel(volume_frame, text="- 00:00", width=60)
         self.time_remaining_label.pack(side='left', padx=2)
-        self.play_pause_button = ctk.CTkButton(volume_frame, text="TẠM DỪNG", width=150, height=40, command=self.toggle_play_pause)
+        self.play_pause_button = ctk.CTkButton(volume_frame, text="TẠM DỪNG", width=150, height=40,
+                                               command=self.toggle_play_pause)
         self.play_pause_button.pack(side='right', padx=10)
 
         # Hàng 2: Tabs (scroll ngang)
@@ -208,7 +267,6 @@ class MusicPlayerApp:
         pass
 
     def format_time(self, ms):
-        # Chuyển đổi mili giây thành định dạng MM:SS, ép kiểu thành số nguyên
         if ms < 0:
             ms = 0
         minutes = int(ms // 60000)  # Ép thành số nguyên
@@ -220,7 +278,6 @@ class MusicPlayerApp:
         pass
 
     def update_time(self):
-        # Cập nhật thanh timeline và thời gian
         if self.current_song and not self.paused and self.total_duration > 0:
             self.current_position = pygame.mixer.music.get_pos()
             if self.current_position < 0:  # Xử lý trường hợp âm (có thể xảy ra khi kết thúc)
@@ -234,7 +291,6 @@ class MusicPlayerApp:
         self.root.after(1000, self.update_time)  # Cập nhật mỗi giây
 
     def wrap_text(self, text, max_chars=45):
-        # Tách tên bài hát thành nhiều dòng, giữ nguyên ý nghĩa, xuống dòng tại khoảng trắng
         if len(text) <= max_chars:
             return text
         words = text.split()
@@ -243,7 +299,6 @@ class MusicPlayerApp:
         current_length = 0
 
         for word in words:
-            # Thêm độ dài từ hiện tại + 1 (khoảng trắng)
             word_length = len(word)
             if current_length + word_length + 1 > max_chars and current_line:
                 lines.append(" ".join(current_line))
@@ -256,7 +311,6 @@ class MusicPlayerApp:
         if current_line:
             lines.append(" ".join(current_line))
 
-        # Giới hạn tối đa 2 dòng
         if len(lines) > 2:
             return "\n".join(lines[:2]) + "..."
         return "\n".join(lines)
@@ -271,15 +325,26 @@ class MusicPlayerApp:
         # Quét thư mục data
         self.tabs = []
         self.songs = {}
+
         for folder in Path(self.data_dir).iterdir():
             if folder.is_dir():
                 self.tabs.append(folder.name)
+
+                # Lấy danh sách file nhạc
                 song_files = [f.name for f in folder.iterdir() if f.suffix.lower() in ['.mp3', '.wav']]
+
+                # Sắp xếp theo thứ tự tự nhiên + metadata
+                sorted_song_files = self.sort_songs_advanced(folder, song_files)
+
+                # Tạo danh sách với tên hiển thị
                 self.songs[folder.name] = [
-                    {"display": self.wrap_text(fname), "file": fname} for fname in song_files  # Hiển thị tên đã tách
+                    {"display": self.wrap_text(fname), "file": fname} for fname in sorted_song_files
                 ]
 
-        # Tạo buttons cho tabs với chữ đen đậm
+        # Sắp xếp tabs theo thứ tự tự nhiên
+        self.tabs.sort(key=self.natural_sort_key)
+
+        # Tạo buttons cho tabs
         self.tab_buttons = {}
         for tab in self.tabs:
             btn = ctk.CTkButton(self.tab_inner_frame, text=tab, width=100, command=lambda t=tab: self.load_songs(t),
